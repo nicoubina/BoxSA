@@ -637,7 +637,7 @@ CREATE TABLE `orden_fabricacion_detalle` (
   KEY `producto_id` (`producto_id`),
   CONSTRAINT `orden_fabricacion_detalle_ibfk_1` FOREIGN KEY (`of_id`) REFERENCES `orden_fabricacion_cabecera` (`of_id`),
   CONSTRAINT `orden_fabricacion_detalle_ibfk_2` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`producto_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1404,6 +1404,39 @@ UNLOCK TABLES;
 --
 -- Dumping routines for database 'boxsa'
 --
+/*!50003 DROP FUNCTION IF EXISTS `OF_FINALIZADA` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `OF_FINALIZADA`(p_of_id INT) RETURNS char(1) CHARSET utf8mb4
+    DETERMINISTIC
+BEGIN
+    DECLARE resultado CHAR(1);
+
+    IF EXISTS (
+        SELECT 1
+        FROM orden_fabricacion_detalle d
+        WHERE d.of_id = p_of_id
+          AND d.estado = 'OFP'
+    ) THEN
+        SET resultado = 'P'; 
+    ELSE
+        SET resultado = 'F'; 
+    END IF;
+
+    RETURN resultado;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 /*!50003 DROP FUNCTION IF EXISTS `Positivo_Negativo` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -1665,6 +1698,73 @@ DELIMITER ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
 /*!50003 SET character_set_results = @saved_cs_results */ ;
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `FACTURA_REMITO` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `FACTURA_REMITO`(
+    IN p_numero_remito VARCHAR(50),
+    IN p_usuario INT
+)
+BEGIN
+    DECLARE v_remito_id INT;
+    DECLARE v_factura_id INT;
+
+    SELECT remito_id
+    INTO v_remito_id
+    FROM remito_cabecera
+    WHERE numero_remito = p_numero_remito;
+
+    IF v_remito_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'El remito no existe';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM factura_cabecera WHERE remito_id = v_remito_id) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'El remito ya fue facturado';
+    END IF;
+
+    INSERT INTO factura_cabecera (
+        numero_factura,
+        fecha_emision,
+        remito_id,
+        cae,
+        vencimiento_cae
+    )
+    VALUES (
+        CONCAT('FAC-', DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')), 
+        CURRENT_DATE,
+        v_remito_id,
+        NULL,  
+        NULL  
+    );
+
+    SET v_factura_id = LAST_INSERT_ID();
+
+    INSERT INTO factura_detalle (
+        factura_id,
+        producto_id,
+        cantidad,
+        precio_unitario,
+        iva_porcentaje
+    )
+    SELECT v_factura_id, producto_id, cantidad, precio_unitario, iva_porcentaje
+    FROM remito_detalle
+    WHERE remito_id = v_remito_id;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 /*!50003 DROP PROCEDURE IF EXISTS `Get_Costo` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -1765,7 +1865,7 @@ DELIMITER ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
 /*!50003 SET character_set_results = @saved_cs_results */ ;
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
-/*!50003 DROP PROCEDURE IF EXISTS `Saldos_Facturas` */;
+/*!50003 DROP PROCEDURE IF EXISTS `REMITO_OF` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
 /*!50003 SET @saved_col_connection = @@collation_connection */ ;
@@ -1775,24 +1875,49 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE DEFINER=`root`@`localhost` PROCEDURE `Saldos_Facturas`(IN pCliente INT)
+CREATE DEFINER=`root`@`localhost` PROCEDURE `REMITO_OF`(
+    IN p_numero_of VARCHAR(50),
+    IN p_usuario INT
+)
 BEGIN
-  SELECT
-      f.idCliente                      AS Cliente,
-      f.idFactura                      AS Comprobante,
-      f.Total                          AS Importe,
-      COALESCE(SUM(rpd.MontoAplicado), 0) AS Pagos,
-      f.Total - COALESCE(SUM(rpd.MontoAplicado), 0) AS Saldo
-  FROM Facturas f
-  LEFT JOIN RecibosPagosDetalle rpd
-         ON rpd.idCliente = f.idCliente
-        AND rpd.FC       = f.idFactura
-  LEFT JOIN RecibosPagosCabecera rpc
-         ON rpc.idrp     = rpd.idrp
-        AND rpc.idCliente = f.idCliente
-  WHERE f.idCliente = pCliente
-  GROUP BY f.idCliente, f.idFactura, f.Total
-  ORDER BY f.idFactura;
+    DECLARE v_of_id INT;
+    DECLARE v_estado CHAR(1);
+    DECLARE v_remito_id INT;
+
+    -- Buscar la OF
+    SELECT of_id
+    INTO v_of_id
+    FROM orden_fabricacion_cabecera
+    WHERE numero_of = p_numero_of;
+
+    IF v_of_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Orden de fabricación no encontrada';
+    END IF;
+
+    SET v_estado = OF_FINALIZADA(v_of_id);
+
+    IF v_estado = 'P' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'La orden de fabricación aún tiene procesos pendientes';
+    END IF;
+
+    -- Validar que no tenga remito previo
+    IF EXISTS (SELECT 1 FROM remito_cabecera WHERE of_id = v_of_id) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'La orden de fabricación ya fue remitida';
+    END IF;
+
+    INSERT INTO remito_cabecera (fecha_emision, usuario_id, of_id)
+    VALUES (CURRENT_DATE, p_usuario, v_of_id);
+
+    SET v_remito_id = LAST_INSERT_ID();
+
+    INSERT INTO remito_detalle (remito_id, producto_id, cantidad)
+    SELECT v_remito_id, producto_id, cantidad
+    FROM orden_fabricacion_detalle
+    WHERE of_id = v_of_id;
+
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -1829,4 +1954,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-17 21:04:22
+-- Dump completed on 2025-10-18  8:44:11

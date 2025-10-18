@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}Detalle OV {{ order.numero_orden }} · Box SA{% endblock %}
+{% block content %}
+<section class="card">
+    <header class="card-header">
+        <h2>Orden de Venta {{ order.numero_orden }}</h2>
+        <div class="actions">
+            <a href="{{ url_for('edit_order', order_id=order.orden_id) }}" class="button">Editar</a>
+            <form action="{{ url_for('delete_order', order_id=order.orden_id) }}" method="post" onsubmit="return confirm('¿Seguro que desea eliminar la OV?');">
+                <button type="submit" class="button danger">Eliminar</button>
+            </form>
+        </div>
+    </header>
+    <dl class="details">
+        <div>
+            <dt>Cliente</dt>
+            <dd>{{ order.razon_social }}</dd>
+        </div>
+        <div>
+            <dt>Fecha de emisión</dt>
+            <dd>{{ order.fecha_emision }}</dd>
+        </div>
+        <div>
+            <dt>Fecha de entrega</dt>
+            <dd>{{ order.fecha_entrega }}</dd>
+        </div>
+        <div>
+            <dt>Tipo de pago</dt>
+            <dd>{{ order.tipo_pago_id or '—' }}</dd>
+        </div>
+        <div>
+            <dt>Tipo de entrega</dt>
+            <dd>{{ order.tipo_entrega_id or '—' }}</dd>
+        </div>
+    </dl>
+    <h3>Productos</h3>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Cantidad</th>
+                <th>Precio unitario</th>
+                <th>% Desc.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for detalle in order.detalles %}
+            <tr>
+                <td>{{ detalle.idProducto }}</td>
+                <td>{{ detalle.ProdDetalle }}</td>
+                <td>{{ detalle.cantidad }}</td>
+                <td>{{ detalle.precio_unitario }}</td>
+                <td>{{ detalle.descuento_porcentaje }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

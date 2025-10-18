@@ -1,0 +1,238 @@
+{% extends 'base.html' %}
+{% block title %}{% if is_edit %}Editar OV{% else %}Nueva OV{% endif %} · Box SA{% endblock %}
+{% block content %}
+<section class="card">
+    <header class="card-header">
+        <h2>{% if is_edit %}Editar Orden de Venta{% else %}Generar Orden de Venta{% endif %}</h2>
+    </header>
+    <form method="post" class="order-form">
+        <div class="grid">
+            <label>
+                Cliente
+                <select name="cliente_id" id="cliente" required>
+                    <option value="">Seleccionar cliente…</option>
+                    {% for client in clients %}
+                        {% set selected = (order and client.cliente_id == order.cliente_id) %}
+                        <option value="{{ client.cliente_id }}" {% if selected %}selected{% endif %}>
+                            {{ client.razon_social }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Fecha de emisión
+                <input type="date" name="fecha_emision" value="{{ (order.fecha_emision if order else None)|datevalue or '' }}" required>
+            </label>
+            <label>
+                Fecha de entrega
+                <input type="date" name="fecha_entrega" value="{{ (order.fecha_entrega if order else None)|datevalue or '' }}" required>
+            </label>
+            <label>
+                Tipo de pago (opcional)
+                <input type="number" name="tipo_pago_id" min="1" value="{{ order.tipo_pago_id if order and order.tipo_pago_id else '' }}">
+            </label>
+            <label>
+                Tipo de entrega (opcional)
+                <input type="number" name="tipo_entrega_id" min="1" value="{{ order.tipo_entrega_id if order and order.tipo_entrega_id else '' }}">
+            </label>
+        </div>
+        <section class="card inner">
+            <header class="card-header">
+                <h3>Productos</h3>
+                <button type="button" class="button primary" id="add-row">Agregar producto</button>
+            </header>
+            <div class="responsive-table">
+                <table class="data-table" id="productos-table">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                            <th>Precio unitario</th>
+                            <th>% Desc.</th>
+                            <th>Componentes</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+        <div class="form-actions">
+            <a href="{{ url_for('index') }}" class="button secondary">Cancelar</a>
+            <button type="submit" class="button primary">Guardar</button>
+        </div>
+    </form>
+</section>
+<script>
+const clientSelect = document.getElementById('cliente');
+const tableBody = document.querySelector('#productos-table tbody');
+const addRowButton = document.getElementById('add-row');
+const productsCache = new Map();
+
+async function fetchProducts(clientId) {
+    if (!clientId) {
+        return [];
+    }
+    if (productsCache.has(clientId)) {
+        return productsCache.get(clientId);
+    }
+    const response = await fetch(`/api/clients/${clientId}/products`);
+    if (!response.ok) {
+        return [];
+    }
+    const products = await response.json();
+    productsCache.set(clientId, products);
+    return products;
+}
+
+function createSelect(products, selectedId) {
+    const select = document.createElement('select');
+    select.name = 'producto_id';
+    select.required = true;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Seleccionar…';
+    select.appendChild(placeholder);
+    products.forEach(product => {
+        const option = document.createElement('option');
+        option.value = product.producto_id;
+        option.textContent = `${product.idProducto} · ${product.ProdDetalle}`;
+        option.dataset.price = product.PUnitario ?? '';
+        if (selectedId && Number(selectedId) === Number(product.producto_id)) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+    select.addEventListener('change', handleProductChange);
+    return select;
+}
+
+function createNumberInput(name, value = '', step = '1', min = '0') {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.name = name;
+    input.required = true;
+    input.min = min;
+    input.step = step;
+    if (value !== undefined && value !== null && value !== '') {
+        input.value = value;
+    }
+    return input;
+}
+
+function createBomCell() {
+    const container = document.createElement('div');
+    container.className = 'bom-container';
+    const list = document.createElement('ul');
+    list.className = 'bom-list';
+    container.appendChild(list);
+    return container;
+}
+
+async function handleProductChange(event) {
+    const select = event.target;
+    const row = select.closest('tr');
+    const priceInput = row.querySelector('input[name="precio_unitario"]');
+    const selectedOption = select.selectedOptions[0];
+    if (selectedOption && selectedOption.dataset.price && !priceInput.value) {
+        priceInput.value = selectedOption.dataset.price;
+    }
+    const bomContainer = row.querySelector('.bom-list');
+    bomContainer.innerHTML = '';
+    const productId = select.value;
+    if (!productId) {
+        return;
+    }
+    const response = await fetch(`/api/products/${productId}/bom`);
+    if (!response.ok) {
+        return;
+    }
+    const bom = await response.json();
+    if (bom.length === 0) {
+        const item = document.createElement('li');
+        item.textContent = 'Sin receta registrada';
+        bomContainer.appendChild(item);
+        return;
+    }
+    bom.forEach(component => {
+        const item = document.createElement('li');
+        item.textContent = `${component.articulo} · ${component.cantidad} ${component.unidad} (stock: ${component.stock})`;
+        bomContainer.appendChild(item);
+    });
+}
+
+async function addProductRow(data = {}) {
+    const clientId = clientSelect.value;
+    const products = await fetchProducts(clientId);
+    const row = document.createElement('tr');
+
+    const productCell = document.createElement('td');
+    productCell.appendChild(createSelect(products, data.producto_id));
+
+    const qtyCell = document.createElement('td');
+    qtyCell.appendChild(createNumberInput('cantidad', data.cantidad ?? '', '1', '1'));
+
+    const priceCell = document.createElement('td');
+    priceCell.appendChild(createNumberInput('precio_unitario', data.precio_unitario ?? '', '0.01', '0'));
+
+    const discountCell = document.createElement('td');
+    discountCell.appendChild(createNumberInput('descuento_porcentaje', data.descuento_porcentaje ?? 0, '0.01', '0'));
+
+    const bomCell = document.createElement('td');
+    const bomContainer = createBomCell();
+    bomCell.appendChild(bomContainer);
+
+    const removeCell = document.createElement('td');
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'button danger-outline';
+    removeButton.textContent = 'Quitar';
+    removeButton.addEventListener('click', () => {
+        row.remove();
+    });
+    removeCell.appendChild(removeButton);
+
+    row.appendChild(productCell);
+    row.appendChild(qtyCell);
+    row.appendChild(priceCell);
+    row.appendChild(discountCell);
+    row.appendChild(bomCell);
+    row.appendChild(removeCell);
+
+    tableBody.appendChild(row);
+    if (data.producto_id) {
+        await handleProductChange({ target: productCell.querySelector('select') });
+    }
+}
+
+addRowButton.addEventListener('click', () => addProductRow());
+clientSelect.addEventListener('change', async () => {
+    const clientId = clientSelect.value;
+    const products = await fetchProducts(clientId);
+    tableBody.querySelectorAll('select[name="producto_id"]').forEach(select => {
+        const selectedValue = select.value;
+        select.innerHTML = '';
+        const rebuilt = createSelect(products, selectedValue);
+        select.replaceWith(rebuilt);
+    });
+});
+
+(async () => {
+    const initialDetails = {{ (order.detalles if order else []) | tojson | safe }};
+    if (!clientSelect.value && initialDetails.length === 0) {
+        const today = new Date().toISOString().split('T')[0];
+        document.querySelector('input[name="fecha_emision"]').value = document.querySelector('input[name="fecha_emision"]').value || today;
+        document.querySelector('input[name="fecha_entrega"]').value = document.querySelector('input[name="fecha_entrega"]').value || today;
+    }
+    if (initialDetails.length > 0) {
+        await addProductRow(); // ensures selects exist while products load
+        tableBody.innerHTML = '';
+        for (const detail of initialDetails) {
+            await addProductRow(detail);
+        }
+    } else {
+        await addProductRow();
+    }
+})();
+</script>
+{% endblock %}
